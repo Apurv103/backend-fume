@@ -1,0 +1,22 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\TableController;
+use App\Http\Controllers\OrderController;
+
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/me', [AuthController::class, 'me']);
+
+    Route::middleware('role:manager,owner')->group(function () {
+        Route::get('/tables', [TableController::class, 'index']);
+    });
+
+    Route::get('/tables/{table}/orders', [OrderController::class, 'indexForTable']);
+    Route::post('/orders', [OrderController::class, 'store'])->middleware('role:server,manager,owner');
+    Route::patch('/orders/{order}', [OrderController::class, 'updateStatus'])->middleware('role:manager,owner');
+});
+
+
