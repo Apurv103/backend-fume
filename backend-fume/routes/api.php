@@ -12,11 +12,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('role:manager,owner')->group(function () {
         Route::get('/tables', [TableController::class, 'index']);
+        Route::get('/orders', [OrderController::class, 'index']);
+        Route::get('/orders/summary', [OrderController::class, 'summary']);
     });
 
     Route::get('/tables/{table}/orders', [OrderController::class, 'indexForTable']);
     Route::post('/orders', [OrderController::class, 'store'])->middleware('role:server,manager,owner');
     Route::patch('/orders/{order}', [OrderController::class, 'updateStatus'])->middleware('role:manager,owner');
+    Route::get('/orders/open', [OrderController::class, 'open']);
 });
 
 
