@@ -12,14 +12,16 @@ RUN a2enmod rewrite
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy source
-COPY . /var/www/html
+# Copy source (Render builds with repo root as context)
+# Copy only the Laravel app directory into the container root
+COPY backend-fume/ /var/www/html
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # Install PHP dependencies, optimize autoloader, and cache configs
 RUN composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction \
+    && mkdir -p storage/framework/{cache,sessions,views} bootstrap/cache \
     && php artisan config:clear || true \
     && php artisan route:clear || true \
     && php artisan view:clear || true \
