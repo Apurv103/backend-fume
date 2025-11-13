@@ -20,7 +20,7 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: SANCTUM_STATEFUL_DOMAINS
-        value: your-frontend.vercel.app,localhost:5173,localhost:8080
+        value: fume-ethereal-lounge.vercel.app,localhost:5173,localhost:8080
       - key: SESSION_DOMAIN
         value: fume-backend.onrender.com
 
