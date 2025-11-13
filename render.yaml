@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: fume-backend
+    env: docker
+    plan: free
+    dockerfilePath: ./backend-fume/Dockerfile
+    autoDeploy: true
+    healthCheckPath: /up
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_KEY
+        sync: false
+      - key: APP_URL
+        value: https://fume-backend.onrender.com
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        sync: false
+      - key: SANCTUM_STATEFUL_DOMAINS
+        value: your-frontend.vercel.app,localhost:5173,localhost:8080
+      - key: SESSION_DOMAIN
+        value: fume-backend.onrender.com
+
+
