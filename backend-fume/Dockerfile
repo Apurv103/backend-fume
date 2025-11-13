@@ -35,7 +35,7 @@ RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-av
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -fsS http://localhost/up || exit 1
 
-# On container start: run migrations (idempotent) then start Apache
-CMD bash -lc "php artisan migrate --force --no-interaction || true; apache2-foreground"
+# On container start: ensure runtime dirs exist, run migrations (idempotent), then start Apache
+CMD bash -lc "mkdir -p storage/framework/{cache,sessions,views} bootstrap/cache && chown -R www-data:www-data storage bootstrap/cache && php artisan migrate --force --no-interaction || true; apache2-foreground"
 
 
