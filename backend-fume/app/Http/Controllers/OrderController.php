@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\Table;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Carbon\Carbon;
 
 class OrderController extends Controller
 {
@@ -31,11 +32,19 @@ class OrderController extends Controller
         if (!empty($validated['table_id'])) {
             $query->where('table_id', $validated['table_id']);
         }
-        if (!empty($validated['from'])) {
-            $query->where('created_at', '>=', $validated['from']);
-        }
-        if (!empty($validated['to'])) {
-            $query->where('created_at', '<=', $validated['to']);
+        // Managers only see today's data, regardless of provided filters
+        $user = $request->user();
+        if ($user && $user->role === 'manager') {
+            $start = Carbon::now('UTC')->startOfDay()->toDateTimeString();
+            $end = Carbon::now('UTC')->endOfDay()->toDateTimeString();
+            $query->whereBetween('created_at', [$start, $end]);
+        } else {
+            if (!empty($validated['from'])) {
+                $query->where('created_at', '>=', $validated['from']);
+            }
+            if (!empty($validated['to'])) {
+                $query->where('created_at', '<=', $validated['to']);
+            }
         }
 
         return response()->json($query->paginate($limit));
@@ -48,54 +57,68 @@ class OrderController extends Controller
             'to' => ['nullable', 'date'],
         ]);
 
-        $query = Order::query();
-        if (!empty($validated['from'])) {
-            $query->where('created_at', '>=', $validated['from']);
-        }
-        if (!empty($validated['to'])) {
-            $query->where('created_at', '<=', $validated['to']);
-        }
-
-        $orders = $query->get();
-
-        $totalOrders = $orders->count();
-        $paidOrders = $orders->where('status', 'paid')->count();
-        $unpaidOrders = $orders->where('status', 'pending')->count();
-
-        $computeTotal = static function (array $items): float {
-            $sum = 0.0;
-            foreach ($items as $it) {
-                $qty = (int)($it['qty'] ?? $it['quantity'] ?? 0);
-                $price = (float)($it['price'] ?? 0);
-                $sum += $qty * $price;
+        $bindings = [];
+        $where = '1=1';
+        $user = $request->user();
+        if ($user && $user->role === 'manager') {
+            // Force current day window for managers
+            $from = Carbon::now('UTC')->startOfDay()->toDateTimeString();
+            $to = Carbon::now('UTC')->endOfDay()->toDateTimeString();
+            $where .= ' AND o.created_at BETWEEN :from AND :to';
+            $bindings['from'] = $from;
+            $bindings['to'] = $to;
+        } else {
+            if (!empty($validated['from'])) {
+                $where .= ' AND o.created_at >= :from';
+                $bindings['from'] = $validated['from'];
             }
-            return $sum;
-        };
-
-        $totalRevenue = 0.0;
-        $pendingRevenue = 0.0;
-        $totalGuests = 0;
-
-        foreach ($orders as $order) {
-            $items = is_array($order->items) ? $order->items : [];
-            $orderTotal = $computeTotal($items);
-            if ($order->status === 'paid') {
-                $totalRevenue += $orderTotal;
-            } elseif ($order->status === 'pending') {
-                $pendingRevenue += $orderTotal;
-            }
-            if (!empty($order->seats)) {
-                $totalGuests += (int)$order->seats;
+            if (!empty($validated['to'])) {
+                $where .= ' AND o.created_at <= :to';
+                $bindings['to'] = $validated['to'];
             }
         }
+
+        // Use SQL with JSONB expansion to avoid loading all orders in memory.
+        $sql = "
+        WITH base AS (
+            SELECT o.*
+            FROM orders o
+            WHERE $where
+        ),
+        paid AS (
+            SELECT * FROM base WHERE status = 'paid'
+        ),
+        pending AS (
+            SELECT * FROM base WHERE status = 'pending'
+        ),
+        paid_items AS (
+            SELECT COALESCE(NULLIF(itm->>'price','')::numeric,0) AS price,
+                   COALESCE(NULLIF(itm->>'qty','')::int,0) AS qty
+            FROM paid, LATERAL jsonb_array_elements(paid.items::jsonb) AS itm
+        ),
+        pending_items AS (
+            SELECT COALESCE(NULLIF(itm->>'price','')::numeric,0) AS price,
+                   COALESCE(NULLIF(itm->>'qty','')::int,0) AS qty
+            FROM pending, LATERAL jsonb_array_elements(pending.items::jsonb) AS itm
+        )
+        SELECT
+            (SELECT COUNT(*) FROM base) AS total_orders,
+            (SELECT COUNT(*) FROM paid) AS paid_orders,
+            (SELECT COUNT(*) FROM pending) AS unpaid_orders,
+            COALESCE((SELECT SUM(price*qty) FROM paid_items), 0)::numeric(12,2) AS total_revenue,
+            COALESCE((SELECT SUM(price*qty) FROM pending_items), 0)::numeric(12,2) AS pending_revenue,
+            COALESCE((SELECT SUM(seats) FROM base WHERE seats IS NOT NULL), 0) AS total_guests;
+        ";
+
+        $row = \DB::selectOne($sql, $bindings);
 
         return response()->json([
-            'totalOrders' => $totalOrders,
-            'paidOrders' => $paidOrders,
-            'unpaidOrders' => $unpaidOrders,
-            'totalRevenue' => round($totalRevenue, 2),
-            'pendingRevenue' => round($pendingRevenue, 2),
-            'totalGuests' => $totalGuests,
+            'totalOrders' => (int) ($row->total_orders ?? 0),
+            'paidOrders' => (int) ($row->paid_orders ?? 0),
+            'unpaidOrders' => (int) ($row->unpaid_orders ?? 0),
+            'totalRevenue' => (float) ($row->total_revenue ?? 0),
+            'pendingRevenue' => (float) ($row->pending_revenue ?? 0),
+            'totalGuests' => (int) ($row->total_guests ?? 0),
         ]);
     }
 
@@ -108,6 +131,11 @@ class OrderController extends Controller
         $user = $request->user();
         if ($user->role === 'server') {
             $query->where('user_id', $user->id);
+        }
+        if ($user->role === 'manager') {
+            $start = Carbon::now('UTC')->startOfDay()->toDateTimeString();
+            $end = Carbon::now('UTC')->endOfDay()->toDateTimeString();
+            $query->whereBetween('created_at', [$start, $end]);
         }
 
         return response()->json($query->get());

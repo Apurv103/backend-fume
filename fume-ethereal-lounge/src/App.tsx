@@ -13,7 +13,9 @@ import ShishaMenu from "./pages/ShishaMenu";
 import Login from "./pages/Login";
 import ServerWorkspace from "./pages/ServerWorkspace";
 import ManagerDashboard from "./pages/ManagerDashboard";
+import OwnerDashboard from "./pages/OwnerDashboard";
 import NotFound from "./pages/NotFound";
+import RequireRole from "./components/RequireRole";
 
 const queryClient = new QueryClient();
 
@@ -32,8 +34,30 @@ const App = () => (
           <Route path="/food-menu" element={<FoodMenu />} />
           <Route path="/shisha-menu" element={<ShishaMenu />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/server" element={<ServerWorkspace />} />
-          <Route path="/manager" element={<ManagerDashboard />} />
+          <Route
+            path="/server"
+            element={
+              <RequireRole roles={["server", "manager", "owner"]}>
+                <ServerWorkspace />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/manager"
+            element={
+              <RequireRole roles={["manager", "owner"]}>
+                <ManagerDashboard />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/owner"
+            element={
+              <RequireRole roles={["owner"]}>
+                <OwnerDashboard />
+              </RequireRole>
+            }
+          />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -39,6 +39,8 @@ const Login = () => {
         navigate("/server");
       } else if (data.user?.role === "manager") {
         navigate("/manager");
+      } else if (data.user?.role === "owner") {
+        navigate("/owner");
       }
     } catch (err: any) {
       toast({ title: "Login failed", description: err.message ?? "Please try again.", variant: "destructive" });
